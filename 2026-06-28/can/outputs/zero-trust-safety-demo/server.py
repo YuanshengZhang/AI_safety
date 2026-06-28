@@ -2035,7 +2035,12 @@ def approval_action(approval_id: str, action: str) -> tuple[int, dict[str, Any]]
             risk_level=approval["risk_level"],
             reason="Human denied the queued action",
         )
-        return 200, {"status": "denied", "approval_id": approval_id}
+        return 200, {
+            "status": "denied",
+            "approval_id": approval_id,
+            "request_id": approval["request_id"],
+            "tool_name": approval["tool_name"],
+        }
 
     pending = PENDING_INTERNAL_ARGS.get(approval_id)
     args = pending["args"] if pending else json.loads(approval["tool_args_redacted"])
@@ -2057,7 +2062,13 @@ def approval_action(approval_id: str, action: str) -> tuple[int, dict[str, Any]]
         risk_level=approval["risk_level"],
         reason="Human approved the queued action",
     )
-    return 200, {"status": "approved", "approval_id": approval_id, "execution": execution}
+    return 200, {
+        "status": "approved",
+        "approval_id": approval_id,
+        "request_id": approval["request_id"],
+        "tool_name": approval["tool_name"],
+        "execution": execution,
+    }
 
 
 class DemoHandler(BaseHTTPRequestHandler):

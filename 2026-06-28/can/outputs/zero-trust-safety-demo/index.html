@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Zero-Trust Safety Overlay Demo</title>
+    <title>AI Guardian SafeScheduler Demo</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -36,8 +36,8 @@
         <div class="brand">
           <div class="brand-mark">ZT</div>
           <div>
-            <h1>Zero-Trust Safety Overlay</h1>
-            <p>Gmail-to-agent workflow for personal-data safety review.</p>
+            <h1>AI Guardian SafeScheduler</h1>
+            <p>Rules + SecurityRAG + tool policy approval for Gmail and Calendar.</p>
           </div>
         </div>
         <div class="status-pill" id="healthPill">
@@ -94,10 +94,44 @@
         <section class="panel flow-panel" aria-labelledby="flowTitle">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Whiteboard workflow</p>
-              <h2 id="flowTitle">End-to-end personal-data agent path</h2>
+              <p class="eyebrow">Presentation workflow</p>
+              <h2 id="flowTitle">One email, one proposed calendar action</h2>
             </div>
             <span class="mini-badge" id="lastStatus">idle</span>
+          </div>
+
+          <div class="demo-brief">
+            <div class="brief-grid" aria-label="SafeScheduler decision layers">
+              <div class="brief-step">
+                <span>1</span>
+                <strong>Incoming email</strong>
+                <small>one selected mock Gmail message</small>
+              </div>
+              <div class="brief-step">
+                <span>2</span>
+                <strong>Rules + SecurityRAG</strong>
+                <small>fast checks and local evidence</small>
+              </div>
+              <div class="brief-step">
+                <span>3</span>
+                <strong>Planner</strong>
+                <small>proposes structured JSON only</small>
+              </div>
+              <div class="brief-step policy">
+                <span>4</span>
+                <strong>Policy / approval</strong>
+                <small>allowlist, schema, provenance</small>
+              </div>
+              <div class="brief-step">
+                <span>5</span>
+                <strong>Calendar output</strong>
+                <small>created only after approval</small>
+              </div>
+            </div>
+            <div class="policy-contract">
+              <strong>Tool policy layer</strong>
+              <p>The tool policy layer is the set of rules that controls what SafeScheduler is and is not allowed to do with your Gmail and Google Calendar. It ensures the agent only reads one email at a time, proposes a single calendar event based on the facts in that email, and always waits for your approval before creating anything. No emails are sent, no events are created automatically, and no one outside the existing email thread is added to your calendar without your confirmation.</p>
+            </div>
           </div>
 
           <div class="flow-map" aria-label="Safety overlay pipeline">
@@ -133,8 +167,8 @@
             </div>
             <div class="flow-node" data-stage="tools">
               <span class="node-index">07</span>
-              <strong>Gmail + Calendar</strong>
-              <small>controlled tools</small>
+              <strong>Mock Calendar</strong>
+              <small>invite after approval</small>
             </div>
             <div class="flow-node" data-stage="sandbox">
               <span class="node-index">08</span>

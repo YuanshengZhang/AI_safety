@@ -1,4 +1,4 @@
-# Zero-Trust Safety Overlay Demo User Guide
+# AI Guardian SafeScheduler Demo User Guide
 
 This guide is for someone receiving the demo folder or zip file.
 
@@ -62,7 +62,7 @@ Important: `127.0.0.1` means "this computer." Other people must run the demo on 
 
 Use the Gmail-style folders: **Inbox**, **Drafts**, **Sent**, and **Spam**.
 
-Select a runnable message in **Inbox** or **Spam**, then click **Run selected email**. **Drafts** and **Sent** are view-only, so the button changes to **View only** there.
+Select a runnable message in **Inbox** or **Spam**, then click **Run selected email**. **Drafts** and **Sent** are present as Gmail-style folders, but SafeScheduler does not send email.
 
 The main story is the first email:
 
@@ -135,6 +135,8 @@ If there is no valid citation, the system falls back to rule checks instead of g
 
 ### Tool Policy Service
 
+The tool policy layer is the set of rules that controls what SafeScheduler is and is not allowed to do with your Gmail and Google Calendar. It ensures the agent only reads one email at a time, proposes a single calendar event based on the facts in that email, and always waits for your approval before creating anything. No emails are sent, no events are created automatically, and no one outside the existing email thread is added to your calendar without your confirmation.
+
 This panel shows what your teammate's `tool-policy.yaml` is checking.
 
 For the calendar tool, it shows:
@@ -167,15 +169,15 @@ Audit log sees:   [EMAIL_REDACTED]
 
 ### Human Gate / Approvals
 
-High-risk actions do not execute immediately. Email and shell actions pause here until someone approves or denies them.
+High-risk actions do not execute immediately. Calendar writes and shell actions pause here until someone approves or denies them. Email sending is hard-denied in the SafeScheduler path.
 
 ### Audit Log
 
 The audit log records what happened, but with sensitive values redacted.
 
-Important: the audit log shows all recent demo emails and tool runs in the SQLite ledger, grouped by request. It is not just the currently selected email.
+Important: the visible audit panel shows only the current demo email or tool run. The SQLite ledger still keeps older runs, but they are hidden during the presentation so the audience sees one clean timeline.
 
-The top row summarizes the recent log and can be clicked as filters:
+The top row summarizes the current request and can be clicked as filters:
 
 ```text
 events    all audit rows
@@ -198,7 +200,7 @@ Each audit event has a numbered workflow badge. The number matches the workflow 
 | 04 | SecurityRAG | `security_rag_retrieved` |
 | 05 | LLM agent | `agent_tool_plan_created` |
 | 06 | Tool policy service | `tool_call_requested`, `tool_policy_evaluated`, `tool_call_blocked`, network and exfiltration decisions |
-| 07 | Gmail + Calendar | `calendar_availability_checked`, allowed calendar execution |
+| 07 | Mock Calendar | `calendar_availability_checked`, allowed calendar execution |
 | 08 | Sandbox | approved shell execution in Docker |
 | 09 | OpenBao + audit | `approval_created`, `approval_approved`, `approval_denied` |
 

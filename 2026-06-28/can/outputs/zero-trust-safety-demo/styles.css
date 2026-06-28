@@ -17,6 +17,8 @@
   --red: #b63d46;
   --red-soft: #f7e3e5;
   --ink: #0d1715;
+  --navy: #102b4e;
+  --navy-soft: #e8f0fa;
   --shadow: 0 16px 40px rgba(18, 32, 29, 0.08);
 }
 
@@ -204,6 +206,83 @@ h3 {
 
 .panel-head.compact {
   margin-bottom: 10px;
+}
+
+.demo-brief {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.brief-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.brief-step {
+  min-width: 0;
+  min-height: 92px;
+  padding: 10px;
+  border: 1px solid rgba(47, 111, 159, 0.24);
+  border-radius: 8px;
+  background: var(--navy-soft);
+}
+
+.brief-step.policy {
+  border-color: rgba(184, 117, 18, 0.45);
+  background: var(--amber-soft);
+}
+
+.brief-step span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.brief-step strong,
+.brief-step small {
+  display: block;
+}
+
+.brief-step strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.brief-step small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.policy-contract {
+  padding: 11px 12px;
+  border: 1px solid rgba(16, 43, 78, 0.22);
+  border-left: 5px solid var(--navy);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.policy-contract strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.policy-contract p {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.42;
 }
 
 .eyebrow {
@@ -584,10 +663,12 @@ textarea:focus {
 
 .flow-map {
   display: grid;
-  grid-template-columns: repeat(4, minmax(126px, 1fr));
+  grid-template-columns: repeat(9, minmax(122px, 1fr));
   gap: 8px;
   align-items: stretch;
   margin: 4px 0 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .flow-line {
@@ -595,8 +676,8 @@ textarea:focus {
 }
 
 .flow-node {
-  min-height: 108px;
-  padding: 12px;
+  min-height: 104px;
+  padding: 11px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-2);
@@ -1415,6 +1496,10 @@ pre {
     grid-template-columns: minmax(300px, 0.95fr) minmax(520px, 1.35fr);
   }
 
+  .brief-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .calendar-slots {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1464,6 +1549,10 @@ pre {
 
   .calendar-slots {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .brief-grid {
+    grid-template-columns: 1fr;
   }
 
   .audit-list,

@@ -1,6 +1,6 @@
-# Zero-Trust Safety Overlay Demo
+# AI Guardian SafeScheduler Demo
 
-A zero-trust safety overlay for personal-data agents that combines guardrails, policy-controlled tools, sandboxed execution, secrets isolation, network monitoring, human approval, and audit logs.
+A zero-trust safety overlay for personal-data agents that combines guardrails, SecurityRAG evidence, policy-controlled tools, sandboxed execution, secrets isolation, human approval, and audit logs.
 
 This demo is based on the `Zero-Trust Safety Overlay` build spec. It runs in dependency-free fallback mode by default, includes a local SecurityRAG evidence layer, and can opt into real integrations for an OpenAI-compatible LLM, Docker, OpenBao, and NeMo Guardrails.
 
@@ -42,6 +42,8 @@ The UI shows the redacted query, rule flags, evidence cards, and analyst verdict
 
 ## SafeScheduler Tool Policy
 
+The tool policy layer is the set of rules that controls what SafeScheduler is and is not allowed to do with your Gmail and Google Calendar. It ensures the agent only reads one email at a time, proposes a single calendar event based on the facts in that email, and always waits for your approval before creating anything. No emails are sent, no events are created automatically, and no one outside the existing email thread is added to your calendar without your confirmation.
+
 The Tool Policy Service sits after the planner and before execution. It validates the planner's structured JSON proposal against `policies/tool-policy.yaml`.
 
 For calendar events it checks:
@@ -82,7 +84,7 @@ The UI includes a fake Gmail interface with **Inbox**, **Drafts**, **Sent**, and
 - Sunday SSN request: prompt-injection email that triggers SecurityRAG evidence and is blocked
 - webhook secret exfiltration, unknown vendor upload, sandbox honeypot, and safe allowlisted lookup
 
-The audit log shows all recent demo runs in the SQLite ledger, grouped by request. It is not limited to the currently selected email.
+The audit panel in the UI shows only the current demo request you just ran. The SQLite ledger still keeps older runs on disk.
 
 ## Real-Stack Mode
 
@@ -174,7 +176,7 @@ If NeMo is enabled but unavailable, the payload and `/health` will show a `rule_
    Prompt-injection phrases are detected before the agent runtime.
 
 4. High-risk actions require approval.
-   Email, write, delete, and shell actions are gated.
+   Calendar writes and shell actions are gated. Email sending is hard-denied in the SafeScheduler path.
 
 5. Everything is logged.
    Decisions are written to `demo_audit.sqlite3`.
@@ -190,6 +192,7 @@ index.html                      browser demo
 styles.css                      operations-dashboard styling
 app.js                          scenario runner and live UI updates
 policies/default_policy.yaml    policy shape from the source spec
+policies/tool-policy.yaml       SafeScheduler policy artifact from the teammate spec
 .env.real.example               optional real-stack environment template
 docker-compose.real.yml         OpenBao dev service
 nemo_guardrails_config/         minimal NeMo Guardrails config
