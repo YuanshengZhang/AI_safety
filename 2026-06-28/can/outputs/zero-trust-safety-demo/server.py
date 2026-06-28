@@ -70,10 +70,10 @@ POLICY = {
         "read_file": {"risk": "medium", "approval_required": False, "allowed": True},
         "write_file": {"risk": "high", "approval_required": True, "allowed": True},
         "delete_file": {"risk": "critical", "approval_required": True, "allowed": True},
-        "send_email": {"risk": "high", "approval_required": True, "allowed": True},
+        "send_email": {"risk": "critical", "approval_required": False, "allowed": False},
         "shell": {"risk": "high", "approval_required": True, "allowed": True},
         "http_request": {"risk": "medium", "approval_required": False, "allowed": True},
-        "create_calendar_event": {"risk": "medium", "approval_required": False, "allowed": True},
+        "create_calendar_event": {"risk": "medium", "approval_required": True, "allowed": True},
     },
     "network": {
         "allowlist": [
@@ -97,6 +97,44 @@ POLICY = {
 }
 
 
+TOOL_POLICY_SOURCE = "policies/tool-policy.yaml"
+TOOL_POLICY_ALLOWED = {
+    "load_mock_email",
+    "run_llm_analyzer",
+    "create_calendar_event",
+    "quarantine_email",
+    "emit_audit_event",
+}
+TOOL_POLICY_HARD_DENIED = {
+    "read_real_gmail": "MVP uses mock email only. No real Gmail connection.",
+    "read_real_calendar": "MVP uses mock calendar only. No real Calendar connection.",
+    "search_inbox": "Agent may only read one selected email. No inbox search.",
+    "read_unrelated_threads": "Agent has no access to other email threads.",
+    "read_attachments": "Attachments are out of scope and an injection risk.",
+    "send_email": "Agent cannot send emails in SafeScheduler. Calendar invitations are sent by the approved calendar event only.",
+    "delete_email": "Emails must be preserved as evidence, especially quarantined ones.",
+    "add_attendee_from_email_body": "Attendees may only come from verified participants, never from body text.",
+    "llm_approve_own_tool_call": "The LLM analyzer has no approval authority.",
+    "pass_raw_email_downstream": "Raw email body is untrusted and must never reach the planner or executor.",
+    "execute_code": "No dynamic code execution in this pipeline.",
+    "run_shell_command": "No shell access for the SafeScheduler agent.",
+    "grant_elevated_permissions": "Permission claims in email content are never honored.",
+}
+TRUSTED_ATTENDEE_PROVENANCES = {"authenticated_sender", "trusted_user_input"}
+CALENDAR_BUSY_WINDOWS = [
+    {
+        "title": "Team standup",
+        "start": "2026-07-03T10:00:00-04:00",
+        "duration_minutes": 30,
+    },
+    {
+        "title": "Security review",
+        "start": "2026-07-03T14:00:00-04:00",
+        "duration_minutes": 60,
+    },
+]
+
+
 GUARDRAIL_RULES = [
     "ignore previous instructions",
     "ignore all previous instructions",
@@ -111,6 +149,10 @@ GUARDRAIL_RULES = [
     "send private data",
     "bypass policy",
     "disable safety",
+    "hide this from",
+    "do not tell sarah",
+    "already approved",
+    "approve this yourself",
 ]
 
 SECURITY_KNOWLEDGE = [
@@ -171,6 +213,22 @@ SECURITY_KNOWLEDGE = [
         "keywords": "approval human review outbound email shell unknown domain large upload delete high risk",
     },
     {
+        "id": "policy-tool-service-boundary",
+        "source": "Tool policy",
+        "category": "policy",
+        "title": "Tool policy service boundary",
+        "summary": "A privileged planner can propose tool calls, but a separate policy service must validate schemas, allowlists, provenance, and approval before execution.",
+        "keywords": "tool policy service schema validation allowlist provenance raw email boundary approval scheduler",
+    },
+    {
+        "id": "policy-calendar-owner-approval",
+        "source": "SafeScheduler policy",
+        "category": "policy",
+        "title": "Calendar owner approval",
+        "summary": "Calendar writes require explicit owner confirmation, verified attendees, available time, and raw_email_passed_downstream=false.",
+        "keywords": "calendar owner approval create event availability attendee provenance raw_email_passed_downstream false",
+    },
+    {
         "id": "email-auth-lookalike",
         "source": "Email security notes",
         "category": "guidance",
@@ -195,12 +253,28 @@ SECURITY_KNOWLEDGE = [
         "keywords": "incident webhook api key customer record debug automation secret leak block",
     },
     {
+        "id": "incident-prompt-injection",
+        "source": "Historical incidents",
+        "category": "incident",
+        "title": "Prompt injection blocked before tools",
+        "summary": "A previous mailbox automation contained instructions to bypass policy and reveal private data; the request was blocked before planner or tool execution.",
+        "keywords": "incident prompt_injection prompt injection ignore previous instructions bypass policy reveal private data blocked before tools",
+    },
+    {
         "id": "incident-ssh-key",
         "source": "Historical incidents",
         "category": "incident",
         "title": "Local key read attempt",
         "summary": "A prior attachment workflow attempted to read an SSH private key before upload; shell commands touching credentials are blocked before sandbox execution.",
         "keywords": "incident ssh private key attachment workflow shell cat id_rsa blocked sandbox",
+    },
+    {
+        "id": "incident-attendee-injection",
+        "source": "Historical incidents",
+        "category": "incident",
+        "title": "Unauthorized attendee injection",
+        "summary": "A past scheduling attack hid a new attendee in email body text; the fix was to accept attendees only from authenticated sender metadata or trusted user input.",
+        "keywords": "incident attendee injection email_body_mention unauthorized attendee provenance authenticated sender trusted user input",
     },
     {
         "id": "example-clean-calendar",
@@ -504,6 +578,25 @@ def security_rule_flags(text: str, tool_name: str = "", args: dict[str, Any] | N
             flags.append("shell_requires_approval")
     if tool_name == "send_email":
         flags.append("outbound_email_requires_approval")
+    if tool_name in TOOL_POLICY_HARD_DENIED:
+        flags.append("hard_denied_tool")
+    if raw_email_detected_in_args(args):
+        flags.append("raw_email_boundary_violation")
+    if tool_name == "create_calendar_event":
+        flags.append("calendar_write_requires_approval")
+        if not args.get("start_datetime_iso"):
+            flags.append("schema_validation_failed")
+        attendees = args.get("attendees", [])
+        if isinstance(attendees, list):
+            if any(
+                isinstance(attendee, dict)
+                and str(attendee.get("provenance", "unknown")) not in TRUSTED_ATTENDEE_PROVENANCES
+                for attendee in attendees
+            ):
+                flags.append("unauthorized_attendee")
+        availability = calendar_availability(args)
+        if availability["checked"] and not availability["available"]:
+            flags.append("calendar_conflict")
     if tool_name == "http_request":
         domain = url_domain(str(args.get("url", "")))[0] or ""
         if domain and domain_matches(domain, POLICY["network"]["blocklist"]):
@@ -542,6 +635,18 @@ def security_rag_search(query: str, flags: list[str], limit: int = 5) -> list[di
             score += 2
         if doc["category"] == "incident" and any(flag in flags for flag in ["clean_calendar_request", "secret_detected", "dangerous_shell"]):
             score += 2
+        if "prompt_injection" in flags and doc["id"] in {"owasp-prompt-injection", "prompt-patterns"}:
+            score += 5
+        if "prompt_injection" in flags and doc["id"] == "incident-prompt-injection":
+            score += 4
+        if "unauthorized_attendee" in flags and doc["id"] in {"incident-attendee-injection", "policy-calendar-owner-approval"}:
+            score += 4
+        if "raw_email_boundary_violation" in flags and doc["id"] == "policy-tool-service-boundary":
+            score += 4
+        if "calendar_conflict" in flags and doc["id"] == "policy-calendar-owner-approval":
+            score += 4
+        if "hard_denied_tool" in flags and doc["id"] == "policy-tool-service-boundary":
+            score += 3
         if score:
             scored.append((score, doc))
 
@@ -803,6 +908,281 @@ def shell_is_dangerous(command: str) -> str | None:
     return None
 
 
+def parse_iso_datetime(value: str) -> dt.datetime | None:
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def message_id_from_text(text: str) -> str:
+    subject = extract_subject(text)
+    seed = subject or text[:160] or "demo-message"
+    return "msg_" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
+
+
+def message_id_hash(message_id: str) -> str:
+    return "sha256:" + hashlib.sha256(message_id.encode("utf-8")).hexdigest()
+
+
+def calendar_availability(args: dict[str, Any]) -> dict[str, Any]:
+    start_text = str(args.get("start_datetime_iso", ""))
+    duration = int(args.get("duration_minutes", 30) or 30)
+    start = parse_iso_datetime(start_text)
+    if start is None:
+        return {
+            "checked": False,
+            "available": False,
+            "requested_start": start_text,
+            "duration_minutes": duration,
+            "reason": "start_datetime_iso is missing or invalid",
+            "conflicts": [],
+        }
+
+    end = start + dt.timedelta(minutes=duration)
+    conflicts: list[dict[str, Any]] = []
+    for busy in CALENDAR_BUSY_WINDOWS:
+        busy_start = parse_iso_datetime(busy["start"])
+        if busy_start is None:
+            continue
+        busy_end = busy_start + dt.timedelta(minutes=int(busy["duration_minutes"]))
+        if start < busy_end and end > busy_start:
+            conflicts.append(
+                {
+                    "title": busy["title"],
+                    "start_datetime_iso": busy["start"],
+                    "duration_minutes": busy["duration_minutes"],
+                }
+            )
+
+    return {
+        "checked": True,
+        "available": not conflicts,
+        "requested_start": start_text,
+        "duration_minutes": duration,
+        "conflicts": conflicts,
+        "reason": "Calendar slot is available" if not conflicts else "Calendar slot conflicts with an existing event",
+    }
+
+
+def raw_email_detected_in_args(args: dict[str, Any]) -> bool:
+    def walk(value: Any) -> bool:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if str(key) in {"raw_email_body", "plain_text_body", "thread_history"}:
+                    return True
+                if walk(item):
+                    return True
+        elif isinstance(value, list):
+            return any(walk(item) for item in value)
+        elif isinstance(value, str):
+            return bool(re.search(r"(?im)^from:\s+.+\n(?:.*\n){0,8}subject:\s+", value))
+        return False
+
+    return walk(args)
+
+
+def risk_score_for_decision(decision: str, risk_level: str = "medium") -> int:
+    if decision in {"block", "deny"}:
+        return 90 if risk_level == "critical" else 82
+    if decision == "quarantine":
+        return 70
+    if decision in {"require_approval", "pending_approval"}:
+        return 45
+    if decision == "warn":
+        return 38
+    return {"low": 12, "medium": 24, "high": 55, "critical": 85}.get(risk_level, 24)
+
+
+def validate_tool_policy_schema(tool_name: str, args: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if tool_name == "create_calendar_event":
+        title = args.get("title")
+        if not isinstance(title, str) or not title.strip():
+            errors.append("title is required")
+        elif len(title) > 200:
+            errors.append("title exceeds 200 characters")
+
+        start = args.get("start_datetime_iso")
+        if not isinstance(start, str) or not start.strip():
+            errors.append("start_datetime_iso is required")
+        elif parse_iso_datetime(start) is None:
+            errors.append("start_datetime_iso must be ISO 8601")
+
+        if "duration_minutes" in args:
+            duration = args.get("duration_minutes")
+            if not isinstance(duration, int):
+                errors.append("duration_minutes must be an integer")
+            elif duration < 5 or duration > 480:
+                errors.append("duration_minutes must be between 5 and 480")
+
+        attendees = args.get("attendees")
+        if not isinstance(attendees, list) or not attendees:
+            errors.append("attendees is required")
+        else:
+            for index, attendee in enumerate(attendees):
+                if not isinstance(attendee, dict):
+                    errors.append(f"attendees[{index}] must be an object")
+                    continue
+                if not isinstance(attendee.get("email"), str) or not attendee.get("email"):
+                    errors.append(f"attendees[{index}].email is required")
+                if not isinstance(attendee.get("provenance"), str):
+                    errors.append(f"attendees[{index}].provenance is required")
+
+        if not isinstance(args.get("source_message_id"), str) or not args.get("source_message_id"):
+            errors.append("source_message_id is required")
+        if args.get("requires_user_confirmation") is not True:
+            errors.append("requires_user_confirmation must be true")
+    return errors
+
+
+def evaluate_tool_policy_service(
+    tool_name: str,
+    args: dict[str, Any],
+    upstream_policy: dict[str, Any],
+) -> dict[str, Any]:
+    source_message_id = str(args.get("source_message_id") or "unknown_message")
+    risk_score = risk_score_for_decision(upstream_policy["decision"], upstream_policy["risk_level"])
+    profile = (
+        "safe_scheduler"
+        if tool_name in TOOL_POLICY_ALLOWED or tool_name in TOOL_POLICY_HARD_DENIED or tool_name == "create_calendar_event"
+        else "zero_trust_tool_policy"
+    )
+    proposed_call = {
+        "trace_id": str(args.get("trace_id") or ""),
+        "source_message_id_hash": message_id_hash(source_message_id),
+        "proposed_tool": tool_name,
+        "arguments_redacted": redact_value(args),
+        "policy_engine_decision": upstream_policy["decision"],
+        "risk_score": risk_score,
+    }
+
+    result: dict[str, Any] = {
+        "service": "Tool Policy Service",
+        "profile": profile,
+        "policy_source": TOOL_POLICY_SOURCE if profile == "safe_scheduler" else "built_in_zero_trust_policy",
+        "proposed_call": proposed_call,
+        "policy_decision": "allow",
+        "validation_passed": True,
+        "validation_errors": [],
+        "hard_deny_triggered": False,
+        "hard_deny_reason": None,
+        "requires_human_approval": False,
+        "approval_timeout_seconds": 300,
+        "audit_event_emitted": True,
+        "raw_email_passed_downstream": False,
+        "reason": "Tool policy checks passed",
+    }
+
+    if tool_name in TOOL_POLICY_HARD_DENIED:
+        result.update(
+            {
+                "policy_decision": "deny",
+                "hard_deny_triggered": True,
+                "hard_deny_reason": "hard_denied_tool",
+                "reason": TOOL_POLICY_HARD_DENIED[tool_name],
+            }
+        )
+        return result
+
+    if upstream_policy["decision"] == "block":
+        result.update(
+            {
+                "policy_decision": "deny",
+                "hard_deny_triggered": True,
+                "hard_deny_reason": "upstream_policy_decision",
+                "reason": "Upstream deterministic policy already blocked this request",
+            }
+        )
+        return result
+
+    if profile == "safe_scheduler" and tool_name not in TOOL_POLICY_ALLOWED:
+        result.update(
+            {
+                "policy_decision": "deny",
+                "hard_deny_triggered": True,
+                "hard_deny_reason": "tool_not_in_allowlist",
+                "reason": f"Tool '{tool_name}' is not allowlisted by SafeScheduler",
+            }
+        )
+        return result
+
+    if raw_email_detected_in_args(args):
+        result.update(
+            {
+                "policy_decision": "deny",
+                "hard_deny_triggered": True,
+                "hard_deny_reason": "raw_email_in_arguments",
+                "reason": "Raw email content was passed into tool arguments",
+            }
+        )
+        return result
+
+    schema_errors = validate_tool_policy_schema(tool_name, args)
+    if schema_errors:
+        result.update(
+            {
+                "policy_decision": "deny",
+                "validation_passed": False,
+                "validation_errors": schema_errors,
+                "reason": "Schema validation failed",
+            }
+        )
+        return result
+
+    if tool_name == "create_calendar_event":
+        attendees = args.get("attendees", [])
+        bad_provenances = sorted(
+            {
+                str(attendee.get("provenance", "unknown"))
+                for attendee in attendees
+                if isinstance(attendee, dict)
+                and str(attendee.get("provenance", "unknown")) not in TRUSTED_ATTENDEE_PROVENANCES
+            }
+        )
+        if bad_provenances:
+            result.update(
+                {
+                    "policy_decision": "deny",
+                    "hard_deny_triggered": True,
+                    "hard_deny_reason": "unauthorized_attendee_provenance",
+                    "reason": "Attendees must come from authenticated sender or trusted user input only",
+                    "blocked_provenances": bad_provenances,
+                }
+            )
+            return result
+
+        availability = calendar_availability(args)
+        result["calendar_availability"] = availability
+        if not availability["available"]:
+            result.update(
+                {
+                    "policy_decision": "deny",
+                    "reason": availability["reason"],
+                }
+            )
+            return result
+
+        result.update(
+            {
+                "policy_decision": "pending_approval",
+                "requires_human_approval": True,
+                "reason": "Calendar write is valid and available, but owner approval is required",
+            }
+        )
+        return result
+
+    if upstream_policy["decision"] == "require_approval":
+        result.update(
+            {
+                "policy_decision": "pending_approval",
+                "requires_human_approval": True,
+                "reason": upstream_policy["reason"],
+            }
+        )
+    return result
+
+
 def policy_decision(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
     tool = POLICY["tools"].get(tool_name)
     detection = detect_value(args)
@@ -1015,14 +1395,24 @@ def execute_tool(tool_name: str, args: dict[str, Any], request_id: str, user_id:
         }
 
     if tool_name == "create_calendar_event":
+        attendees = args.get("attendees", [])
+        attendee_refs = [
+            attendee.get("email", "unknown") for attendee in attendees if isinstance(attendee, dict)
+        ]
         return {
             "executed": True,
             "simulation": True,
             "event_id": "evt_" + uuid.uuid4().hex[:10],
             "title": args.get("title", "Protected automation"),
-            "time": args.get("time", "requested time"),
-            "attendee_ref": args.get("attendee_ref", "tokenized"),
-            "notes": args.get("notes", ""),
+            "start_datetime_iso": args.get("start_datetime_iso"),
+            "duration_minutes": args.get("duration_minutes", 30),
+            "attendee_refs": attendee_refs,
+            "attendee_provenance": [
+                attendee.get("provenance", "unknown") for attendee in attendees if isinstance(attendee, dict)
+            ],
+            "source_message_id_hash": message_id_hash(str(args.get("source_message_id", "unknown_message"))),
+            "invitation_sent": True,
+            "notes": "Mock calendar invitation sent after owner approval. Raw email body was not passed downstream.",
         }
 
     if tool_name == "read_file":
@@ -1113,7 +1503,27 @@ def handle_tool_call(data: dict[str, Any], request_id: str | None = None) -> dic
         args = {"value": args}
 
     redacted_args = redact_value(args)
-    decision = policy_decision(tool_name, args)
+    policy_engine = policy_decision(tool_name, args)
+    tool_policy = evaluate_tool_policy_service(tool_name, args, policy_engine)
+    decision = dict(policy_engine)
+    if tool_policy["policy_decision"] == "deny":
+        decision.update(
+            {
+                "decision": "block",
+                "risk_level": "critical" if tool_policy["hard_deny_triggered"] else "high",
+                "reason": tool_policy["reason"],
+                "tool_policy_decision": tool_policy["policy_decision"],
+            }
+        )
+    elif tool_policy["policy_decision"] == "pending_approval":
+        decision.update(
+            {
+                "decision": "require_approval",
+                "risk_level": "medium" if tool_name == "create_calendar_event" else decision["risk_level"],
+                "reason": tool_policy["reason"],
+                "tool_policy_decision": tool_policy["policy_decision"],
+            }
+        )
     security_rag = security_rag_context(
         text=json.dumps(redacted_args, ensure_ascii=True, sort_keys=True),
         status={"block": "blocked", "require_approval": "review", "allow": "allowed"}.get(decision["decision"], decision["decision"]),
@@ -1128,11 +1538,46 @@ def handle_tool_call(data: dict[str, Any], request_id: str | None = None) -> dic
         event_type="tool_call_requested",
         tool_name=tool_name,
         input_redacted=redacted_args,
-        output_redacted=decision,
+        output_redacted={
+            "policy_engine": policy_engine,
+            "tool_policy_service": tool_policy,
+            "final_decision": decision,
+        },
         decision=decision["decision"],
         risk_level=decision["risk_level"],
         reason=decision["reason"],
     )
+    audit_policy_decision = {
+        "pending_approval": "require_approval",
+        "deny": "block",
+        "allow": "allow",
+    }.get(tool_policy["policy_decision"], tool_policy["policy_decision"])
+    log_event(
+        request_id=request_id,
+        user_id=user_id,
+        event_type="tool_policy_evaluated",
+        tool_name=tool_name,
+        input_redacted=redacted_args,
+        output_redacted=tool_policy,
+        decision=audit_policy_decision,
+        risk_level=decision["risk_level"],
+        reason=tool_policy["reason"],
+    )
+    if tool_policy.get("calendar_availability"):
+        log_event(
+            request_id=request_id,
+            user_id=user_id,
+            event_type="calendar_availability_checked",
+            tool_name=tool_name,
+            input_redacted={
+                "start_datetime_iso": args.get("start_datetime_iso"),
+                "duration_minutes": args.get("duration_minutes", 30),
+            },
+            output_redacted=tool_policy["calendar_availability"],
+            decision="allow" if tool_policy["calendar_availability"].get("available") else "block",
+            risk_level="low" if tool_policy["calendar_availability"].get("available") else "medium",
+            reason=tool_policy["calendar_availability"].get("reason", "Calendar availability checked"),
+        )
     log_event(
         request_id=request_id,
         user_id=user_id,
@@ -1186,6 +1631,8 @@ def handle_tool_call(data: dict[str, Any], request_id: str | None = None) -> dic
             "reason": decision["reason"],
             "tool_args_redacted": redacted_args,
             "policy": decision,
+            "policy_engine": policy_engine,
+            "tool_policy": tool_policy,
             "security_rag": security_rag,
         }
 
@@ -1218,6 +1665,8 @@ def handle_tool_call(data: dict[str, Any], request_id: str | None = None) -> dic
             "approval": approval,
             "tool_args_redacted": redacted_args,
             "policy": decision,
+            "policy_engine": policy_engine,
+            "tool_policy": tool_policy,
             "security_rag": security_rag,
         }
 
@@ -1242,6 +1691,8 @@ def handle_tool_call(data: dict[str, Any], request_id: str | None = None) -> dic
         "tool_args_redacted": redacted_args,
         "execution": execution,
         "policy": decision,
+        "policy_engine": policy_engine,
+        "tool_policy": tool_policy,
         "security_rag": security_rag,
     }
 
@@ -1301,42 +1752,41 @@ def fallback_tool_plan(prompt: str, safe_agent_context: str, public_vault: list[
     email_token = find_first_token(public_vault, "email") or "PII_EMAIL_BACKEND_REF"
     is_frido_meeting = "frido" in lower_prompt and "friday" in lower_prompt
     meeting_title = "Meeting with Frido" if is_frido_meeting else "Protected personal-data automation"
-    meeting_time = "Friday 11:00 AM" if is_frido_meeting else "Requested time from tokenized context"
-    email_subject = "Meeting confirmed for Friday at 11:00 AM" if is_frido_meeting else "Confirmation prepared by safety overlay"
-    email_body = (
-        "Confirmed for Friday at 11:00 AM. The calendar invite has been prepared. "
-        "The safety overlay used backend vault references for private contact details."
-        if is_frido_meeting
-        else (
-            "The requested automation is ready. Personal details remain behind "
-            f"vault references such as {email_token}. No raw personal data is in this message."
-        )
+    source_message_id = message_id_from_text(prompt)
+    start_datetime_iso = "2026-07-03T11:00:00-04:00" if "friday" in lower_prompt else ""
+    if "2pm" in lower_prompt or "2:00" in lower_prompt or "2 pm" in lower_prompt:
+        start_datetime_iso = "2026-07-03T14:00:00-04:00"
+    if "ambiguous" in lower_prompt or "sometime next week" in lower_prompt or "whenever" in lower_prompt:
+        start_datetime_iso = ""
+
+    attendees = [{"email": email_token, "provenance": "authenticated_sender"}]
+    if "mallory" in lower_prompt or "unauthorized attendee" in lower_prompt:
+        attendees.append({"email": "mallory@evil.example", "provenance": "email_body_mention"})
+
+    requires_user_confirmation = not any(
+        phrase in lower_prompt for phrase in ["already approved", "do not ask", "approve this yourself"]
     )
+    calendar_args: dict[str, Any] = {
+        "title": meeting_title,
+        "duration_minutes": 30,
+        "attendees": attendees,
+        "source_message_id": source_message_id,
+        "requires_user_confirmation": requires_user_confirmation,
+    }
+    if start_datetime_iso:
+        calendar_args["start_datetime_iso"] = start_datetime_iso
+
     return {
         "runtime": "simulated_agent",
         "summary": (
-            "Deterministic fallback created a Frido calendar invite and an approval-gated Gmail reply."
+            "Deterministic fallback proposed a SafeScheduler calendar invite."
             if is_frido_meeting
-            else "Deterministic fallback created a calendar action and an approval-gated email action."
+            else "Deterministic fallback proposed a calendar action for policy validation."
         ),
         "actions": [
             {
                 "tool_name": "create_calendar_event",
-                "args": {
-                    "title": meeting_title,
-                    "time": meeting_time,
-                    "attendee_ref": email_token,
-                    "notes": "Agent received tokenized context only; raw contact details stay in the backend vault.",
-                    "source_context": safe_agent_context[:600],
-                },
-            },
-            {
-                "tool_name": "send_email",
-                "args": {
-                    "to": email_token,
-                    "subject": email_subject,
-                    "body": email_body,
-                },
+                "args": calendar_args,
             },
         ],
     }
@@ -1354,8 +1804,10 @@ def real_llm_tool_plan(safe_agent_context: str, public_vault: list[dict[str, str
         "You are a privacy-preserving agent. You only see tokenized personal data. "
         "Never ask for or invent raw PII. Return only JSON with this schema: "
         "{\"summary\": string, \"actions\": [{\"tool_name\": string, \"args\": object}]}. "
-        "Allowed tools: create_calendar_event, send_email, http_request, read_file. "
-        "Use vault tokens exactly as provided for recipients or attendees."
+        "Allowed SafeScheduler tool: create_calendar_event only. "
+        "Calendar args must include title, start_datetime_iso, duration_minutes, attendees, "
+        "source_message_id, and requires_user_confirmation=true. "
+        "Use vault tokens exactly as provided for attendees. Do not propose send_email."
     )
     payload = {
         "model": model,
@@ -1519,16 +1971,25 @@ def handle_agent_run(data: dict[str, Any]) -> dict[str, Any]:
         )
 
     status = "completed"
+    final_reason = "Agent processed minimized context; high-risk actions are gated"
     if any(action["status"] == "blocked" for action in actions):
         status = "blocked"
+        final_reason = next(
+            (action.get("reason", final_reason) for action in actions if action["status"] == "blocked"),
+            final_reason,
+        )
     elif any(action["status"] == "pending_approval" for action in actions):
         status = "pending_approval"
-    security_rag["analyst_verdict"] = security_analyst_verdict(status, "Agent processed minimized context; high-risk actions are gated", security_rag["evidence"])
+        final_reason = next(
+            (action.get("reason", final_reason) for action in actions if action["status"] == "pending_approval"),
+            final_reason,
+        )
+    security_rag["analyst_verdict"] = security_analyst_verdict(status, final_reason, security_rag["evidence"])
 
     return {
         "status": status,
         "request_id": request_id,
-        "reason": "Agent processed minimized context; high-risk actions are gated",
+        "reason": final_reason,
         "input_redacted": input_redacted,
         "agent_context": safe_agent_context,
         "vault": public_vault,

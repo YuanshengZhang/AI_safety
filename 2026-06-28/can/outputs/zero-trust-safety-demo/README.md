@@ -22,13 +22,14 @@ For a step-by-step handout to share with others, see `USER_GUIDE.md`.
 
 - A synthetic Gmail inbox acts as the personal-data source.
 - The main demo email is: Sarah gets an email from Frido to meet Friday at 11:00 AM.
-- The agent creates a calendar event with Frido invited and drafts a confirmation email, while private contact data remains tokenized.
+- The agent proposes a calendar event with Frido invited, checks availability, and waits for calendar-owner approval before the mock invitation is sent.
 - PII is detected and replaced with opaque vault tokens before the agent or real LLM sees it.
 - Secret-like values are removed before they enter agent context or logs.
 - SecurityRAG retrieves local evidence from curated security knowledge after rule checks and before the agent/tool decision is explained.
 - The analyst explanation can cite only retrieved evidence; if no evidence is found, the verdict falls back to rule checks.
-- Every proposed tool call is checked by the policy engine before execution.
-- High-risk actions, such as `send_email`, are queued for human approval.
+- Every proposed tool call is checked by the policy engine and the SafeScheduler Tool Policy Service before execution.
+- `policies/tool-policy.yaml` is included as the policy artifact for allowlists, hard-denies, schema checks, attendee provenance, raw-email boundary checks, and approval behavior.
+- Calendar writes require owner approval. `send_email` is hard-denied in the SafeScheduler path; approved calendar events send the mock invitation.
 - Dangerous shell commands are blocked before sandboxing.
 - Blocked, allowed, and approval decisions are written to SQLite audit logs.
 - Outbound HTTP requests are checked by an allowlist, blocklist, raw-IP rule, body-size rule, and secret-exfiltration rule.
@@ -38,6 +39,21 @@ For a step-by-step handout to share with others, see `USER_GUIDE.md`.
 SecurityRAG is implemented as a local curated knowledge layer for the demo. It does not override rule checks. It builds a short redacted query from the subject, tool name, and rule flags, then retrieves matching evidence from local entries such as MITRE ATT&CK-style techniques, CISA-style phishing guidance, OWASP LLM risks, enterprise policy, email security notes, prompt-injection patterns, phishing examples, and historical incidents.
 
 The UI shows the redacted query, rule flags, evidence cards, and analyst verdict under **SecurityRAG evidence**.
+
+## SafeScheduler Tool Policy
+
+The Tool Policy Service sits after the planner and before execution. It validates the planner's structured JSON proposal against `policies/tool-policy.yaml`.
+
+For calendar events it checks:
+
+- tool is allowlisted
+- required fields are present, including `start_datetime_iso`
+- attendees have trusted provenance: `authenticated_sender` or `trusted_user_input`
+- `requires_user_confirmation` is true
+- raw email was not passed into tool arguments
+- the requested slot is available on the mock calendar
+
+If all checks pass, the action becomes a Human Gate approval. If the owner approves, the mock calendar event is created and the invitation is marked sent.
 
 ## API Endpoints
 
@@ -55,17 +71,18 @@ GET  /health
 
 ## Demo Scenarios
 
-The UI includes a fake Gmail interface with **Inbox**, **Drafts**, **Sent**, and **Spam** folders. It includes seven runnable/source messages:
+The UI includes a fake Gmail interface with **Inbox**, **Drafts**, **Sent**, and **Spam** folders. It includes targeted messages for:
 
-- Frido appointment: creates a Friday 11:00 AM calendar event and queues the Gmail reply for human approval.
-- Sunday SSN request: prompt-injection email asks the agent to share Sarah's SSN; blocked before the LLM.
-- Webhook debug dump: tries to POST a fake API key and SSN to `webhook.site`; blocked by policy.
-- Vendor export: unknown outbound domain and large upload; queued for human review.
-- Attachment cleanup: tries to read `~/.ssh/id_rsa`; blocked before sandboxing.
-- Honeypot attachment scan: safe shell command requires approval, then runs in Docker with no network.
-- NeMo docs lookup: safe allowlisted GitHub request; allowed.
+- clean Frido scheduling: available Friday 11:00 AM slot, valid provenance, pending owner approval
+- busy calendar slot: valid request denied because Friday 2:00 PM conflicts with an existing event
+- ambiguous date: denied because `start_datetime_iso` is missing
+- unauthorized attendee injection: denied because an attendee came from email body text
+- raw email boundary leak: denied because raw email reached tool arguments
+- hard-denied `send_email`: blocked by SafeScheduler
+- Sunday SSN request: prompt-injection email that triggers SecurityRAG evidence and is blocked
+- webhook secret exfiltration, unknown vendor upload, sandbox honeypot, and safe allowlisted lookup
 
-The primary Frido path processes realistic personal data, shows the tokenized context given to the agent, creates a calendar action, and queues the Gmail action for approval.
+The audit log shows all recent demo runs in the SQLite ledger, grouped by request. It is not limited to the currently selected email.
 
 ## Real-Stack Mode
 
@@ -140,7 +157,7 @@ To test it in the UI:
 
 1. Install `nemoguardrails` in the Python environment used to run `server.py`.
 2. Run the backend with `USE_NEMO=1`.
-3. Click **Prompt injection**.
+3. Click **Sunday records request**.
 4. The decision payload should include `engine: "nemo_guardrails"` if NeMo handled the check.
 
 If NeMo is enabled but unavailable, the payload and `/health` will show a `rule_based_fallback` engine and a `fallback_reason`.

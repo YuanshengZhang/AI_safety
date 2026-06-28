@@ -12,9 +12,9 @@ tools:
     approval_required: true
     allowed: true
   send_email:
-    risk: high
-    approval_required: true
-    allowed: true
+    risk: critical
+    approval_required: false
+    allowed: false
   shell:
     risk: high
     approval_required: true
@@ -25,7 +25,7 @@ tools:
     allowed: true
   create_calendar_event:
     risk: medium
-    approval_required: false
+    approval_required: true
     allowed: true
 
 network:

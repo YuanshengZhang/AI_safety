@@ -61,6 +61,17 @@
             <div id="gmailList" class="gmail-list" aria-label="Demo Gmail messages"></div>
           </div>
 
+          <div class="calendar-interface" aria-label="Mock calendar availability">
+            <div class="calendar-head">
+              <div>
+                <p class="eyebrow">Mock Calendar</p>
+                <h3>Friday availability</h3>
+              </div>
+              <span class="mini-badge" id="calendarLastCheck">no check yet</span>
+            </div>
+            <div id="calendarSlots" class="calendar-slots"></div>
+          </div>
+
           <div class="gmail-preview-head">
             <div>
               <p class="eyebrow">Selected raw email</p>
@@ -117,8 +128,8 @@
             </div>
             <div class="flow-node" data-stage="policy">
               <span class="node-index">06</span>
-              <strong>Tool policy</strong>
-              <small>allowed or blocked</small>
+              <strong>Tool policy service</strong>
+              <small>schema, provenance, approval</small>
             </div>
             <div class="flow-node" data-stage="tools">
               <span class="node-index">07</span>
@@ -145,6 +156,10 @@
             <div class="output-section">
               <div class="section-title">SecurityRAG evidence</div>
               <div id="securityRagPanel" class="security-rag empty-state">Run a scenario to see retrieved evidence.</div>
+            </div>
+            <div class="output-section">
+              <div class="section-title">Tool policy service</div>
+              <div id="toolPolicyPanel" class="tool-policy-panel empty-state">No tool call has reached the policy service yet.</div>
             </div>
             <div class="output-section">
               <div class="section-title">Vault references</div>

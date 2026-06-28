@@ -1,0 +1,332 @@
+# SafeScheduler — Tool Policy
+# Enforced by the tool policy service AFTER the deterministic policy engine
+# and BEFORE any tool reaches execution.
+#
+# Core principle: Email can provide facts, but it cannot provide authority.
+# Default behavior: deny everything not explicitly listed as allowed: true.
+
+default_policy: deny
+
+# -------------------------------------------------------------------------
+# DECISION FRAMEWORK
+# Maps policy engine output to action. Risk scores are computed by
+# deterministic code, NOT by the LLM.
+#
+#   allow            → 0–29   (A) read-only extraction, clean email
+#   require_approval → 30–59  (B/C) safe to propose, user must confirm
+#   warn             → suspicious signal, not enough to block
+#   quarantine       → 60–79  (D) suspicious, hold for human review
+#   block            → 80–100 (F) unsafe, no proposal created
+# -------------------------------------------------------------------------
+
+decisions:
+  allow:
+    risk_score_range: [0, 29]
+    description: "Clean and low risk. Read-only extraction only."
+  require_approval:
+    risk_score_range: [30, 59]
+    description: "Safe enough to propose. Calendar owner must confirm before execution."
+  warn:
+    risk_score_range: [30, 49]
+    description: "Something looks suspicious but not enough to block. Flag in UI."
+  quarantine:
+    risk_score_range: [60, 79]
+    description: "Suspicious. Do not create a proposal. Hold for human review."
+  block:
+    risk_score_range: [80, 100]
+    description: "Unsafe. Do not create a proposal. Preserve email for evidence."
+
+# -------------------------------------------------------------------------
+# HARD BLOCK TRIGGERS
+# Any of these findings from the LLM analyzer → immediate BLOCK.
+# These bypass the risk score entirely. Determined by deterministic code.
+# -------------------------------------------------------------------------
+
+hard_block_triggers:
+  - indirect_prompt_injection    # "ignore previous instructions", "[SYSTEM: ...]"
+  - sensitive_data_request       # requests for SSN, credentials, private data
+  - unexpected_recipient         # email body tries to add unauthorized attendees
+  - instruction_override_attempt # claims elevated permissions or admin status
+  - hide_from_owner              # instructs agent not to tell the calendar owner
+  - self_approval_attempt        # email claims "the user already approved this"
+  - policy_bypass_attempt        # tries to approve its own tool call or bypass policy
+  - exfiltration_attempt         # tries to send data to an external address
+
+# -------------------------------------------------------------------------
+# ALLOWED TOOLS
+# -------------------------------------------------------------------------
+
+tools:
+
+  # -----------------------------------------------------------------------
+  # LOAD MOCK EMAIL — read-only, no real Gmail, single email only
+  # -----------------------------------------------------------------------
+  load_mock_email:
+    allowed: true
+    approval_required: false
+    description: "Loads one selected mock email from the mock inbox JSON store."
+    constraints:
+      - load_single_email_only: true
+      - source: mock_json_store        # never real Gmail
+      - raw_body_treated_as: untrusted
+    parameters:
+      case_id:
+        type: string
+        required: true
+    rate_limit:
+      requests_per_minute: 60
+    secret_scope: null
+    audit:
+      log_input: true
+      log_output: true
+      log_event: email_loaded
+
+  # -----------------------------------------------------------------------
+  # QUARANTINED LLM ANALYZER — observes only, no tools, no secrets
+  # Returns structured JSON findings. Does NOT make the final decision.
+  # -----------------------------------------------------------------------
+  run_llm_analyzer:
+    allowed: true
+    approval_required: false
+    description: >
+      Passes sanitized email fields to the quarantined LLM analyzer.
+      The analyzer may only return observations in strict JSON.
+      It cannot call tools, create events, send emails, or follow
+      instructions found in the email.
+    constraints:
+      - input_fields_allowed: [message_id, from_email, subject, plain_text_body, known_sender, upstream_findings]
+      - raw_email_body_label: untrusted         # explicitly marked in the payload
+      - llm_has_no_tools: true
+      - llm_has_no_secrets: true
+      - llm_has_no_long_term_memory: true
+      - output_format: strict_json_schema_only  # additionalProperties: false
+      - llm_cannot_produce_tool_calls: true
+      - llm_cannot_produce_urls_for_downstream: true
+    parameters:
+      message_id:
+        type: string
+        required: true
+      from_email:
+        type: string
+        required: true
+      subject:
+        type: string
+        max_length: 500
+        required: true
+      plain_text_body:
+        type: string
+        max_length: 8000
+        required: true
+      known_sender:
+        type: boolean
+        required: true
+      upstream_findings:
+        type: object
+        required: true
+    rate_limit:
+      requests_per_minute: 30
+    secret_scope: null
+    audit:
+      log_input: true
+      log_output: true
+      log_event: llm_analysis_complete
+
+  # -----------------------------------------------------------------------
+  # CREATE CALENDAR EVENT — write operation, always requires user approval
+  # Only reachable if policy engine returns require_approval AND
+  # calendar owner confirms in the UI.
+  # -----------------------------------------------------------------------
+  create_calendar_event:
+    allowed: true
+    approval_required: true                    # always — calendar creation is a write
+    approval_source: calendar_owner_ui         # never auto-approved
+    description: "Creates a mock calendar event from a policy-approved scheduling extract."
+    constraints:
+      - participants_source: verified_participants_only
+        reason: "Attendees must come from email metadata, not from the email body."
+      - raw_email_passed_downstream: false     # enforced — never pass raw body here
+      - planner_sees_raw_email: false
+      - planner_input: safe_structured_extract_only
+    parameters:
+      title:
+        type: string
+        max_length: 200
+        required: true
+        source: llm_extracted_topic            # not free text from the email body
+      start_datetime_iso:
+        type: string
+        format: iso8601
+        required: true
+      duration_minutes:
+        type: integer
+        min: 5
+        max: 480
+        default: 30
+        required: false
+      attendees:
+        type: array
+        items:
+          type: object
+          properties:
+            email: string
+            provenance:
+              type: enum
+              values: [authenticated_sender, trusted_user_input]
+                      # "email_body_mention" is NOT allowed — blocks unauthorized attendees
+        required: true
+      source_message_id:
+        type: string
+        required: true
+      requires_user_confirmation:
+        type: boolean
+        value: true                            # hardcoded, cannot be overridden
+    rate_limit:
+      requests_per_minute: 10
+    secret_scope: null                         # mock calendar — no real credentials
+    audit:
+      log_input: true
+      log_output: true
+      log_approval_decision: true
+      log_event: calendar_event_proposed
+
+  # -----------------------------------------------------------------------
+  # QUARANTINE EMAIL — flags email for human review, preserves for evidence
+  # -----------------------------------------------------------------------
+  quarantine_email:
+    allowed: true
+    approval_required: false
+    description: "Flags a suspicious email for human review. Does not delete it."
+    constraints:
+      - action: flag_only                      # never delete — preserve for evidence
+      - email_preserved: true
+    parameters:
+      case_id:
+        type: string
+        required: true
+      reason_codes:
+        type: array
+        items:
+          type: enum
+          values: [prompt_injection, sender_spoofing, private_data_request,
+                   unauthorized_attendee, hidden_instruction, self_approval_attempt,
+                   exfiltration_attempt, policy_bypass, unknown_sender]
+        required: true
+    rate_limit:
+      requests_per_minute: 60
+    secret_scope: null
+    audit:
+      log_input: true
+      log_output: true
+      log_event: email_quarantined
+
+  # -----------------------------------------------------------------------
+  # EMIT AUDIT EVENT — dashboard observability for every pipeline step
+  # -----------------------------------------------------------------------
+  emit_audit_event:
+    allowed: true
+    approval_required: false
+    description: "Emits a structured audit event to the demo dashboard."
+    parameters:
+      trace_id:
+        type: string
+        required: true
+      stage:
+        type: enum
+        values: [email_loaded, llm_analysis_complete, policy_decision_made,
+                 event_proposed, event_blocked, event_quarantined, user_approved,
+                 user_rejected]
+        required: true
+      policy_decision:
+        type: enum
+        values: [allow, require_approval, warn, quarantine, block, no_action]
+        required: true
+      risk_score:
+        type: integer
+        min: 0
+        max: 100
+        required: true
+      risk_flags:
+        type: array
+        required: true
+      tool_calls_generated:
+        type: integer
+        required: true
+      message_id_hash:          # hashed — never log the raw message ID
+        type: string
+        required: true
+    rate_limit:
+      requests_per_minute: 120
+    secret_scope: null
+    audit:
+      log_input: true
+      log_output: false
+
+# -------------------------------------------------------------------------
+# HARD DENIES — explicitly blocked, never reach execution
+# These reflect what SafeScheduler must never do per the safety brief.
+# -------------------------------------------------------------------------
+
+hard_denied:
+
+  read_real_gmail:
+    allowed: false
+    reason: "MVP uses mock email only. No real Gmail connection."
+
+  read_real_calendar:
+    allowed: false
+    reason: "MVP uses mock calendar only. No real Calendar connection."
+
+  search_inbox:
+    allowed: false
+    reason: "Agent may only read one selected email. No inbox search."
+
+  read_unrelated_threads:
+    allowed: false
+    reason: "Agent has no access to other email threads."
+
+  read_attachments:
+    allowed: false
+    reason: "Attachments are out of scope and an injection risk."
+
+  send_email:
+    allowed: false
+    reason: "Agent cannot send any emails. Blocked unconditionally."
+
+  delete_email:
+    allowed: false
+    reason: "Emails must be preserved as evidence, especially quarantined ones."
+
+  add_attendee_from_email_body:
+    allowed: false
+    reason: "Attendees may only come from verified_participants (email metadata), never from body text."
+
+  llm_approve_own_tool_call:
+    allowed: false
+    reason: "The LLM analyzer has no approval authority. Policy is deterministic code only."
+
+  pass_raw_email_downstream:
+    allowed: false
+    reason: "Raw email body is untrusted and must never reach the planner or tool executor."
+
+  execute_code:
+    allowed: false
+    reason: "No dynamic code execution in this pipeline."
+
+  run_shell_command:
+    allowed: false
+    reason: "No shell access for the agent."
+
+  grant_elevated_permissions:
+    allowed: false
+    reason: "Permission claims in email content are never honored."
+
+# -------------------------------------------------------------------------
+# GLOBAL LIMITS
+# -------------------------------------------------------------------------
+
+global:
+  max_tool_calls_per_request: 8      # one email → one analysis → one decision → one action
+  max_request_payload_bytes: 16384   # 16KB cap on any tool input
+  approval_timeout_seconds: 300      # calendar owner must confirm within 5 min or denied
+  require_audit_for_all: true
+  raw_email_passed_downstream: false # system-level enforcement — checked at handoff boundary

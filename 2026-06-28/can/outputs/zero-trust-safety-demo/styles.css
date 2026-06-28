@@ -373,6 +373,81 @@ textarea:focus {
   border-top: 1px solid var(--line);
 }
 
+.calendar-interface {
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.calendar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.calendar-slots {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.calendar-slot {
+  min-width: 0;
+  min-height: 74px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.calendar-slot.selected {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.calendar-slot.busy {
+  background: var(--red-soft);
+  border-color: rgba(182, 61, 70, 0.34);
+}
+
+.calendar-slot.pending {
+  background: var(--amber-soft);
+  border-color: rgba(184, 117, 18, 0.4);
+}
+
+.calendar-slot.created {
+  background: var(--green-soft);
+  border-color: rgba(14, 124, 102, 0.4);
+}
+
+.calendar-slot.blocked {
+  background: var(--red-soft);
+  border-color: var(--red);
+}
+
+.calendar-slot strong,
+.calendar-slot span,
+.calendar-slot small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.calendar-slot strong {
+  font-size: 13px;
+}
+
+.calendar-slot span,
+.calendar-slot small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
 .button-row,
 .scenario-grid {
   display: grid;
@@ -633,6 +708,7 @@ pre {
 
 .vault-list,
 .security-rag,
+.tool-policy-panel,
 .approval-list,
 .audit-list {
   display: grid;
@@ -758,6 +834,130 @@ pre {
   color: var(--text);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.tool-policy-panel {
+  align-content: start;
+  max-height: 318px;
+  overflow: auto;
+}
+
+.policy-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.policy-card.allow {
+  border-left-color: var(--green);
+}
+
+.policy-card.pending_approval {
+  border-left-color: var(--amber);
+}
+
+.policy-card.deny,
+.policy-card.block {
+  border-left-color: var(--red);
+}
+
+.policy-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.policy-card-head div,
+.policy-card p,
+.policy-availability {
+  min-width: 0;
+}
+
+.policy-card-head strong,
+.policy-card-head span {
+  display: block;
+}
+
+.policy-card-head strong {
+  font-size: 13px;
+}
+
+.policy-card-head span,
+.policy-card p,
+.policy-availability span,
+.policy-availability code {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.policy-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.policy-checks span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.policy-checks .ok {
+  color: var(--green);
+}
+
+.policy-checks .warn {
+  color: var(--amber);
+}
+
+.policy-checks .bad {
+  color: var(--red);
+}
+
+.policy-errors {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.policy-availability {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.policy-availability.ok {
+  border-color: rgba(14, 124, 102, 0.34);
+}
+
+.policy-availability.bad {
+  border-color: rgba(182, 61, 70, 0.38);
+}
+
+.policy-availability strong {
+  font-size: 12px;
+}
+
+.policy-availability code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
 }
 
 .vault-token {
@@ -1215,6 +1415,10 @@ pre {
     grid-template-columns: minmax(300px, 0.95fr) minmax(520px, 1.35fr);
   }
 
+  .calendar-slots {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .side-column {
     position: static;
     max-height: none;
@@ -1256,6 +1460,10 @@ pre {
   .gmail-folder {
     justify-content: center;
     flex-wrap: wrap;
+  }
+
+  .calendar-slots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .audit-list,
