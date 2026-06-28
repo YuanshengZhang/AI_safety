@@ -594,7 +594,7 @@ textarea:focus {
 
 .outputs {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -632,6 +632,7 @@ pre {
 }
 
 .vault-list,
+.security-rag,
 .approval-list,
 .audit-list {
   display: grid;
@@ -648,6 +649,115 @@ pre {
 
 .vault-entry {
   padding: 10px;
+}
+
+.security-rag {
+  align-content: start;
+  max-height: 318px;
+  overflow: auto;
+}
+
+.rag-verdict,
+.rag-query,
+.rag-evidence {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.rag-verdict {
+  display: grid;
+  gap: 6px;
+  border-left: 4px solid var(--ink);
+}
+
+.rag-verdict div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rag-verdict strong {
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.rag-verdict span,
+.rag-verdict p,
+.rag-query span,
+.rag-evidence small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.rag-query {
+  display: grid;
+  gap: 5px;
+}
+
+.rag-query code {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.rag-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rag-flags span,
+.rag-evidence-head span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.rag-evidence-list {
+  display: grid;
+  gap: 8px;
+}
+
+.rag-evidence {
+  display: grid;
+  gap: 6px;
+}
+
+.rag-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rag-evidence-head strong {
+  color: var(--blue);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.rag-evidence h4 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.rag-evidence p {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .vault-token {
@@ -861,7 +971,9 @@ pre {
 .workflow-chip.gateway,
 .workflow-badge.gateway,
 .workflow-chip.nemo,
-.workflow-badge.nemo {
+.workflow-badge.nemo,
+.workflow-chip.securityrag,
+.workflow-badge.securityrag {
   border-color: rgba(47, 111, 159, 0.34);
 }
 

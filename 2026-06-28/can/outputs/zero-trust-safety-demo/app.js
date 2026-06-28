@@ -7,6 +7,7 @@ const runButton = document.querySelector("#runAgent");
 const runButtonLabel = document.querySelector("#runButtonLabel");
 const decisionOutput = document.querySelector("#decisionOutput");
 const agentContext = document.querySelector("#agentContext");
+const securityRagPanel = document.querySelector("#securityRagPanel");
 const vaultList = document.querySelector("#vaultList");
 const approvalsList = document.querySelector("#approvalsList");
 const auditLog = document.querySelector("#auditLog");
@@ -311,11 +312,12 @@ const workflowSteps = {
   data: { index: "01", label: "Gmail data" },
   gateway: { index: "02", label: "Retrieval + redaction" },
   nemo: { index: "03", label: "NeMo prompt rules" },
-  llm: { index: "04", label: "LLM agent" },
-  policy: { index: "05", label: "Tool policy" },
-  tools: { index: "06", label: "Gmail + Calendar" },
-  sandbox: { index: "07", label: "Sandbox" },
-  audit: { index: "08", label: "OpenBao + audit" },
+  securityrag: { index: "04", label: "SecurityRAG" },
+  llm: { index: "05", label: "LLM agent" },
+  policy: { index: "06", label: "Tool policy" },
+  tools: { index: "07", label: "Gmail + Calendar" },
+  sandbox: { index: "08", label: "Sandbox" },
+  audit: { index: "09", label: "OpenBao + audit" },
 };
 
 function workflowStepForAudit(row) {
@@ -324,6 +326,7 @@ function workflowStepForAudit(row) {
 
   if (eventType === "agent_context_minimized") return "gateway";
   if (eventType === "input_checked" || eventType === "prompt_injection_detected") return "nemo";
+  if (eventType === "security_rag_retrieved") return "securityrag";
   if (eventType === "agent_tool_plan_created") return "llm";
   if (eventType === "secret_detected") return toolName ? "policy" : "gateway";
   if (eventType.startsWith("network_request")) return "policy";
@@ -600,12 +603,17 @@ function updatePipeline(payload) {
   if (payload.status === "blocked" && payload.matched_rules) {
     markStage("gateway", "ok");
     markStage("nemo", "blocked");
+    if (payload.security_rag) markStage("securityrag", "ok");
     return;
   }
 
   if (payload.input_redacted || payload.agent_context) {
     markStage("gateway", "ok");
     markStage("nemo", "ok");
+  }
+
+  if (payload.security_rag) {
+    markStage("securityrag", "ok");
   }
 
   if (payload.agent_context) {
@@ -625,6 +633,7 @@ function updatePipeline(payload) {
 
   if (hasToolCall) {
     markStage("llm", payload.agent_context ? "ok" : "pending");
+    if (payload.security_rag) markStage("securityrag", "ok");
   }
   if (hasScanHit) markStage("gateway", payload.status === "blocked" ? "blocked" : "ok");
   if (hasBlocked) {
@@ -665,6 +674,45 @@ function renderVault(entries = []) {
   `).join("");
 }
 
+function renderSecurityRag(rag) {
+  if (!rag || !rag.evidence || !rag.evidence.length) {
+    securityRagPanel.className = "security-rag empty-state";
+    securityRagPanel.textContent = "No SecurityRAG evidence returned for this request.";
+    return;
+  }
+  const verdict = rag.analyst_verdict || {};
+  securityRagPanel.className = "security-rag";
+  securityRagPanel.innerHTML = `
+    <div class="rag-verdict">
+      <div>
+        <strong>${escapeHtml(verdict.verdict || "unknown")}</strong>
+        <span>${escapeHtml(verdict.confidence || "confidence unknown")}</span>
+      </div>
+      <p>${escapeHtml(verdict.rationale || "No analyst rationale returned.")}</p>
+    </div>
+    <div class="rag-query">
+      <span>Query</span>
+      <code>${escapeHtml(rag.query_redacted || "")}</code>
+    </div>
+    <div class="rag-flags">
+      ${(rag.rule_flags || []).map((flag) => `<span>${escapeHtml(flag)}</span>`).join("") || "<span>no flags</span>"}
+    </div>
+    <div class="rag-evidence-list">
+      ${rag.evidence.map((item) => `
+        <article class="rag-evidence">
+          <div class="rag-evidence-head">
+            <strong>${escapeHtml(item.citation_id)}</strong>
+            <span>${escapeHtml(item.category)}</span>
+          </div>
+          <h4>${escapeHtml(item.title)}</h4>
+          <p>${escapeHtml(item.summary)}</p>
+          <small>${escapeHtml(item.source)}</small>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderMain(payload) {
   setDecision(payload);
   updatePipeline(payload);
@@ -677,6 +725,7 @@ function renderMain(payload) {
   } else {
     agentContext.textContent = "No agent context returned.";
   }
+  renderSecurityRag(payload.security_rag);
   renderVault(payload.vault || []);
 }
 

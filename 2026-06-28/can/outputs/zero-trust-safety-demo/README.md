@@ -2,7 +2,7 @@
 
 A zero-trust safety overlay for personal-data agents that combines guardrails, policy-controlled tools, sandboxed execution, secrets isolation, network monitoring, human approval, and audit logs.
 
-This demo is based on the `Zero-Trust Safety Overlay` build spec. It runs in dependency-free fallback mode by default, and can opt into real integrations for an OpenAI-compatible LLM, Docker, OpenBao, and NeMo Guardrails.
+This demo is based on the `Zero-Trust Safety Overlay` build spec. It runs in dependency-free fallback mode by default, includes a local SecurityRAG evidence layer, and can opt into real integrations for an OpenAI-compatible LLM, Docker, OpenBao, and NeMo Guardrails.
 
 ## Run
 
@@ -25,11 +25,19 @@ For a step-by-step handout to share with others, see `USER_GUIDE.md`.
 - The agent creates a calendar event with Frido invited and drafts a confirmation email, while private contact data remains tokenized.
 - PII is detected and replaced with opaque vault tokens before the agent or real LLM sees it.
 - Secret-like values are removed before they enter agent context or logs.
+- SecurityRAG retrieves local evidence from curated security knowledge after rule checks and before the agent/tool decision is explained.
+- The analyst explanation can cite only retrieved evidence; if no evidence is found, the verdict falls back to rule checks.
 - Every proposed tool call is checked by the policy engine before execution.
 - High-risk actions, such as `send_email`, are queued for human approval.
 - Dangerous shell commands are blocked before sandboxing.
 - Blocked, allowed, and approval decisions are written to SQLite audit logs.
 - Outbound HTTP requests are checked by an allowlist, blocklist, raw-IP rule, body-size rule, and secret-exfiltration rule.
+
+## SecurityRAG
+
+SecurityRAG is implemented as a local curated knowledge layer for the demo. It does not override rule checks. It builds a short redacted query from the subject, tool name, and rule flags, then retrieves matching evidence from local entries such as MITRE ATT&CK-style techniques, CISA-style phishing guidance, OWASP LLM risks, enterprise policy, email security notes, prompt-injection patterns, phishing examples, and historical incidents.
+
+The UI shows the redacted query, rule flags, evidence cards, and analyst verdict under **SecurityRAG evidence**.
 
 ## API Endpoints
 

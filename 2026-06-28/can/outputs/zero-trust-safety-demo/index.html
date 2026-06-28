@@ -105,28 +105,33 @@
               <strong>NeMo prompt rules</strong>
               <small>jailbreak check</small>
             </div>
-            <div class="flow-node" data-stage="llm">
+            <div class="flow-node" data-stage="securityrag">
               <span class="node-index">04</span>
+              <strong>SecurityRAG</strong>
+              <small>local evidence</small>
+            </div>
+            <div class="flow-node" data-stage="llm">
+              <span class="node-index">05</span>
               <strong>LLM agent</strong>
               <small>token-only context</small>
             </div>
             <div class="flow-node" data-stage="policy">
-              <span class="node-index">05</span>
+              <span class="node-index">06</span>
               <strong>Tool policy</strong>
               <small>allowed or blocked</small>
             </div>
             <div class="flow-node" data-stage="tools">
-              <span class="node-index">06</span>
+              <span class="node-index">07</span>
               <strong>Gmail + Calendar</strong>
               <small>controlled tools</small>
             </div>
             <div class="flow-node" data-stage="sandbox">
-              <span class="node-index">07</span>
+              <span class="node-index">08</span>
               <strong>Sandbox</strong>
               <small>honeypot executor</small>
             </div>
             <div class="flow-node" data-stage="audit">
-              <span class="node-index">08</span>
+              <span class="node-index">09</span>
               <strong>OpenBao + audit</strong>
               <small>secrets and ledger</small>
             </div>
@@ -136,6 +141,10 @@
             <div class="output-section">
               <div class="section-title">Agent context</div>
               <pre id="agentContext">Run a scenario to see what the agent receives.</pre>
+            </div>
+            <div class="output-section">
+              <div class="section-title">SecurityRAG evidence</div>
+              <div id="securityRagPanel" class="security-rag empty-state">Run a scenario to see retrieved evidence.</div>
             </div>
             <div class="output-section">
               <div class="section-title">Vault references</div>

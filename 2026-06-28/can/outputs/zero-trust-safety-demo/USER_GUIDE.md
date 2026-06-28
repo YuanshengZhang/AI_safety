@@ -12,6 +12,7 @@ The key idea:
 Gmail data
 Retrieval gateway replaces private values with vault tokens
 NeMo / prompt rules block jailbreaks
+SecurityRAG retrieves local evidence
 LLM agent proposes actions using tokens
 Tool policy checks Gmail, Calendar, HTTP, and shell calls
 Sandbox contains risky execution
@@ -109,6 +110,21 @@ maya.chen@example.com -> PII_EMAIL_...
 
 The agent can refer to the token, but not the raw value.
 
+### SecurityRAG Evidence
+
+This panel explains why the security decision is trustworthy.
+
+SecurityRAG runs after fast rule checks and before the analyst explanation. It does not override the rules. It builds a short redacted query from the email subject, tool name, and rule flags, then searches local curated knowledge.
+
+The panel shows:
+
+- the redacted search query
+- rule flags such as `prompt_injection`, `secret_detected`, or `unknown_domain`
+- retrieved evidence cards from local security knowledge
+- an analyst verdict that cites only retrieved evidence
+
+If there is no valid citation, the system falls back to rule checks instead of guessing.
+
 ### Vault References
 
 These are backend-only references. Think of them as claim tickets.
@@ -147,11 +163,12 @@ Each audit event has a numbered workflow badge. The number matches the workflow 
 |---|---|---|
 | 02 | Retrieval + redaction | `agent_context_minimized`, input-side `secret_detected` |
 | 03 | NeMo prompt rules | `input_checked`, `prompt_injection_detected` |
-| 04 | LLM agent | `agent_tool_plan_created` |
-| 05 | Tool policy | `tool_call_requested`, `tool_call_blocked`, network and exfiltration decisions |
-| 06 | Gmail + Calendar | allowed Gmail or calendar tool execution |
-| 07 | Sandbox | approved shell execution in Docker |
-| 08 | OpenBao + audit | `approval_created`, `approval_approved`, `approval_denied` |
+| 04 | SecurityRAG | `security_rag_retrieved` |
+| 05 | LLM agent | `agent_tool_plan_created` |
+| 06 | Tool policy | `tool_call_requested`, `tool_call_blocked`, network and exfiltration decisions |
+| 07 | Gmail + Calendar | allowed Gmail or calendar tool execution |
+| 08 | Sandbox | approved shell execution in Docker |
+| 09 | OpenBao + audit | `approval_created`, `approval_approved`, `approval_denied` |
 
 The **Why this happened** section is collapsed by default. Click it to see the reason, safe stored input, and decision evidence for that event.
 
