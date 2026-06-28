@@ -1,0 +1,51 @@
+tools:
+  read_file:
+    risk: medium
+    approval_required: false
+    allowed: true
+  write_file:
+    risk: high
+    approval_required: true
+    allowed: true
+  delete_file:
+    risk: critical
+    approval_required: true
+    allowed: true
+  send_email:
+    risk: high
+    approval_required: true
+    allowed: true
+  shell:
+    risk: high
+    approval_required: true
+    allowed: true
+  http_request:
+    risk: medium
+    approval_required: false
+    allowed: true
+  create_calendar_event:
+    risk: medium
+    approval_required: false
+    allowed: true
+
+network:
+  allowlist:
+    - github.com
+    - raw.githubusercontent.com
+    - pypi.org
+    - npmjs.com
+    - docs.nvidia.com
+    - api.openai.com
+    - exampleclinic.org
+  blocklist:
+    - pastebin.com
+    - transfer.sh
+    - webhook.site
+    - attacker.com
+
+rules:
+  block_raw_ip: true
+  block_secret_exfiltration: true
+  require_approval_for_unknown_domains: true
+  require_approval_for_large_uploads: true
+  max_outbound_body_chars_without_approval: 2000

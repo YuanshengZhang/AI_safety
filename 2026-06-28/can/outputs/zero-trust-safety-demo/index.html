@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zero-Trust Safety Overlay Demo</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-play" viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z"></path>
+      </symbol>
+      <symbol id="icon-shield" viewBox="0 0 24 24">
+        <path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z"></path>
+      </symbol>
+      <symbol id="icon-block" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8"></circle>
+        <path d="M7 7l10 10"></path>
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <path d="M5 13l4 4L19 7"></path>
+      </symbol>
+      <symbol id="icon-clock" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8"></circle>
+        <path d="M12 8v5l3 2"></path>
+      </symbol>
+      <symbol id="icon-mail" viewBox="0 0 24 24">
+        <rect x="4" y="6" width="16" height="12" rx="2"></rect>
+        <path d="M4 8l8 6 8-6"></path>
+      </symbol>
+    </svg>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">ZT</div>
+          <div>
+            <h1>Zero-Trust Safety Overlay</h1>
+            <p>Gmail-to-agent workflow for personal-data safety review.</p>
+          </div>
+        </div>
+        <div class="status-pill" id="healthPill">
+          <span class="status-dot" id="healthDot"></span>
+          <span id="healthText">Checking gateway</span>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="panel request-panel" aria-labelledby="requestTitle">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Personal data source</p>
+              <h2 id="requestTitle">Demo Gmail</h2>
+            </div>
+            <span class="mini-badge">synthetic emails</span>
+          </div>
+
+          <div class="gmail-shell" aria-label="Demo Gmail mailbox">
+            <nav id="gmailFolders" class="gmail-folders" aria-label="Gmail folders"></nav>
+            <div id="gmailList" class="gmail-list" aria-label="Demo Gmail messages"></div>
+          </div>
+
+          <div class="gmail-preview-head">
+            <div>
+              <p class="eyebrow">Selected raw email</p>
+              <h3 id="selectedEmailTitle">No email selected</h3>
+            </div>
+            <span class="mini-badge" id="selectedRoute">agent path</span>
+          </div>
+
+          <textarea id="promptInput" spellcheck="false"></textarea>
+
+          <div class="button-row">
+            <button class="primary-button" id="runAgent">
+              <svg aria-hidden="true"><use href="#icon-play"></use></svg>
+              <span id="runButtonLabel">Run selected email</span>
+            </button>
+            <button class="ghost-button" id="resetPrompt">Reset</button>
+          </div>
+        </section>
+
+        <section class="panel flow-panel" aria-labelledby="flowTitle">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Whiteboard workflow</p>
+              <h2 id="flowTitle">End-to-end personal-data agent path</h2>
+            </div>
+            <span class="mini-badge" id="lastStatus">idle</span>
+          </div>
+
+          <div class="flow-map" aria-label="Safety overlay pipeline">
+            <div class="flow-node" data-stage="data">
+              <span class="node-index">01</span>
+              <strong>Gmail data</strong>
+              <small>raw user content</small>
+            </div>
+            <div class="flow-node" data-stage="gateway">
+              <span class="node-index">02</span>
+              <strong>Retrieval + redaction</strong>
+              <small>PII and minimization</small>
+            </div>
+            <div class="flow-node" data-stage="nemo">
+              <span class="node-index">03</span>
+              <strong>NeMo prompt rules</strong>
+              <small>jailbreak check</small>
+            </div>
+            <div class="flow-node" data-stage="llm">
+              <span class="node-index">04</span>
+              <strong>LLM agent</strong>
+              <small>token-only context</small>
+            </div>
+            <div class="flow-node" data-stage="policy">
+              <span class="node-index">05</span>
+              <strong>Tool policy</strong>
+              <small>allowed or blocked</small>
+            </div>
+            <div class="flow-node" data-stage="tools">
+              <span class="node-index">06</span>
+              <strong>Gmail + Calendar</strong>
+              <small>controlled tools</small>
+            </div>
+            <div class="flow-node" data-stage="sandbox">
+              <span class="node-index">07</span>
+              <strong>Sandbox</strong>
+              <small>honeypot executor</small>
+            </div>
+            <div class="flow-node" data-stage="audit">
+              <span class="node-index">08</span>
+              <strong>OpenBao + audit</strong>
+              <small>secrets and ledger</small>
+            </div>
+          </div>
+
+          <div class="outputs">
+            <div class="output-section">
+              <div class="section-title">Agent context</div>
+              <pre id="agentContext">Run a scenario to see what the agent receives.</pre>
+            </div>
+            <div class="output-section">
+              <div class="section-title">Vault references</div>
+              <div id="vaultList" class="vault-list empty-state">No vault tokens yet.</div>
+            </div>
+            <div class="output-section output-wide">
+              <div class="section-title">Decision payload</div>
+              <pre id="decisionOutput">Waiting for a request.</pre>
+            </div>
+          </div>
+        </section>
+
+        <aside class="side-column">
+          <section class="panel audit-panel" aria-labelledby="auditTitle">
+            <div class="panel-head compact">
+              <div>
+                <p class="eyebrow">SQLite ledger</p>
+                <h2 id="auditTitle">Audit log</h2>
+              </div>
+              <button class="icon-button" id="refreshAudit" aria-label="Refresh audit log" title="Refresh audit log">
+                <svg aria-hidden="true"><use href="#icon-shield"></use></svg>
+              </button>
+            </div>
+            <div id="auditLog" class="audit-list empty-state">No audit events yet.</div>
+          </section>
+
+          <section class="panel approvals-panel" aria-labelledby="approvalsTitle">
+            <div class="panel-head compact">
+              <div>
+                <p class="eyebrow">Human gate</p>
+                <h2 id="approvalsTitle">Approvals</h2>
+              </div>
+              <button class="icon-button" id="refreshApprovals" aria-label="Refresh approvals" title="Refresh approvals">
+                <svg aria-hidden="true"><use href="#icon-clock"></use></svg>
+              </button>
+            </div>
+            <div id="approvalsList" class="approval-list empty-state">No pending approvals.</div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

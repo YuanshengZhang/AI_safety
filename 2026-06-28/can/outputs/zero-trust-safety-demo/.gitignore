@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Runtime artifacts
+demo_audit.sqlite3
+server.log
+workspace/
+
+# Local secrets
+.env
+.env.*
+!.env.real.example
