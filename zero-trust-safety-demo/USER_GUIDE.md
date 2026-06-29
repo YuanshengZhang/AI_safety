@@ -366,7 +366,7 @@ If that fails, install NeMo Guardrails or run the demo in fallback mode.
 Zip the folder:
 
 ```bash
-cd /Users/yuanshengzhang/Documents/Codex/2026-06-28/can/outputs
+cd AI-Guardian-SafeScheduler
 zip -r zero-trust-safety-demo.zip zero-trust-safety-demo
 ```
 

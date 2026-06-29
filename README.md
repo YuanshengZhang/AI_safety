@@ -7,8 +7,8 @@ The demo story: Sarah receives an email from Frido asking to meet Friday at 11:0
 ## Quick Start
 
 ```bash
-git clone https://github.com/YuanshengZhang/AI_safety.git
-cd AI_safety/2026-06-28/can/outputs/zero-trust-safety-demo
+git clone https://github.com/YuanshengZhang/AI_safety.git AI-Guardian-SafeScheduler
+cd AI-Guardian-SafeScheduler/zero-trust-safety-demo
 python3 server.py --port 8765
 ```
 
@@ -93,7 +93,7 @@ The tool policy layer controls what SafeScheduler is allowed to do with Gmail an
 The policy file is here:
 
 ```text
-2026-06-28/can/outputs/zero-trust-safety-demo/policies/tool-policy.yaml
+zero-trust-safety-demo/policies/tool-policy.yaml
 ```
 
 ## SecurityRAG
@@ -121,13 +121,13 @@ The demo can also connect to real local infrastructure:
 See the detailed guide for setup commands:
 
 ```text
-2026-06-28/can/outputs/zero-trust-safety-demo/USER_GUIDE.md
+zero-trust-safety-demo/USER_GUIDE.md
 ```
 
 ## Project Layout
 
 ```text
-2026-06-28/can/outputs/zero-trust-safety-demo/
+zero-trust-safety-demo/
   server.py                 local backend and safety pipeline
   index.html                browser UI
   app.js                    demo interactions
