@@ -490,6 +490,28 @@ function stageSummaryHtml(rows) {
   `;
 }
 
+function auditStageGroups(rows) {
+  const grouped = new Map();
+  rows.forEach((row) => {
+    const stage = workflowStepForAudit(row);
+    if (!grouped.has(stage)) grouped.set(stage, []);
+    grouped.get(stage).push(row);
+  });
+  return Object.keys(workflowSteps)
+    .filter((stage) => grouped.has(stage))
+    .map((stage) => {
+      const items = grouped.get(stage).sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
+      const latest = items[items.length - 1] || {};
+      return {
+        stage,
+        rows: items,
+        latest,
+        outcome: requestOutcome(items),
+        ...workflowSteps[stage],
+      };
+    });
+}
+
 function requestOutcome(rows) {
   if (rows.some((row) => row.decision === "block")) return "blocked";
   if (rows.some((row) => row.decision === "require_approval")) return "review";
@@ -1062,7 +1084,7 @@ async function refreshAudit() {
   auditLog.className = "audit-list";
   const stats = auditStats(scopedRows);
   const filteredRows = scopedRows.filter((row) => auditRowMatchesFilter(row));
-  const groups = groupAuditRows(filteredRows);
+  const groups = auditStageGroups(filteredRows);
   const eventKind = activeAuditFilter === "all"
     ? "audit"
     : auditFilterLabel(activeAuditFilter).toLowerCase();
@@ -1075,52 +1097,54 @@ async function refreshAudit() {
       ${auditStatButton({ filter: "secrets", count: stats.secrets, label: "secrets", className: "secrets" })}
     </div>
     <div class="audit-filter-note">Current demo only: ${escapeHtml(shortId(activeRequestId))} - showing ${escapeHtml(filteredRows.length)} ${escapeHtml(eventKind)} event${filteredRows.length === 1 ? "" : "s"}</div>
-    <div class="audit-help-note">This panel is scoped to the email you just ran. The SQLite ledger keeps older runs, but they are hidden here for the presentation.</div>
-    ${stageSummaryHtml(filteredRows)}
+    <div class="audit-help-note">Current request timeline. Each workflow step appears once; open a step to inspect the underlying audit events.</div>
     ${filteredRows.length ? "" : `<div class="empty-state">No ${escapeHtml(auditFilterLabel(activeAuditFilter).toLowerCase())} events in the current audit log.</div>`}
     ${groups.map((group) => {
-      const outcome = requestOutcome(group.rows);
-      const latest = group.rows[group.rows.length - 1] || {};
       return `
-        <section class="audit-card ${classToken(outcome)}">
-          <div class="audit-card-head">
+        <section class="audit-card audit-stage-card ${classToken(group.outcome)}">
+          <div class="audit-stage-head">
             <div>
-              <div class="audit-card-title">Request ${escapeHtml(shortId(group.requestId))}</div>
-              <div class="audit-meta">${escapeHtml(group.rows.length)} events - latest ${escapeHtml(latest.created_at || "")}</div>
+              <div class="audit-stage-title">
+                <span>${escapeHtml(group.index)}</span>
+                ${escapeHtml(group.label)}
+              </div>
+              <div class="audit-meta">${escapeHtml(group.rows.length)} event${group.rows.length === 1 ? "" : "s"} - latest ${escapeHtml(group.latest.created_at || "")}</div>
             </div>
-            <span class="decision ${classToken(outcome)}">${escapeHtml(outcome)}</span>
+            <span class="decision ${classToken(group.outcome)}">${escapeHtml(group.outcome)}</span>
           </div>
-          ${stageSummaryHtml(group.rows)}
-          <div class="audit-events">
-            ${group.rows.map((row) => {
-              const input = clippedJson(row.input_redacted);
-              const output = clippedJson(row.output_redacted);
-              return `
-                <article class="audit-event ${classToken(row.decision)}">
-                  <div class="audit-event-head">
-                    <div class="audit-event-title-group">
-                      ${workflowStepBadge(row)}
-                      <span class="audit-event-title">${escapeHtml(row.event_type)}</span>
+          <p class="audit-stage-reason">${escapeHtml(group.latest.reason || "No reason recorded.")}</p>
+          <details class="audit-why audit-stage-details">
+            <summary>Inspect ${escapeHtml(group.rows.length)} event${group.rows.length === 1 ? "" : "s"}</summary>
+            <div class="audit-mini-events">
+              ${group.rows.map((row) => {
+                const input = clippedJson(row.input_redacted);
+                const output = clippedJson(row.output_redacted);
+                return `
+                  <article class="audit-mini-event ${classToken(row.decision)}">
+                    <div class="audit-mini-head">
+                      <strong>${escapeHtml(row.event_type)}</strong>
+                      <span class="decision ${classToken(row.decision)}">${escapeHtml(row.decision)}</span>
                     </div>
-                    <span class="decision ${classToken(row.decision)}">${escapeHtml(row.decision)}</span>
-                  </div>
-                  <div class="audit-event-meta">
-                    <span class="risk ${classToken(row.risk_level)}">${escapeHtml(row.risk_level)}</span>
-                    ${row.tool_name ? `<span>${escapeHtml(row.tool_name)}</span>` : ""}
-                    <span>${escapeHtml(row.created_at || "")}</span>
-                  </div>
-                  <details class="audit-why">
-                    <summary>Why this happened</summary>
-                    <div class="audit-why-body">
-                      <p>${escapeHtml(row.reason || "No reason recorded.")}</p>
-                      ${input ? `<label>Input stored safely</label><pre>${escapeHtml(input)}</pre>` : ""}
-                      ${output ? `<label>Decision evidence</label><pre>${escapeHtml(output)}</pre>` : ""}
+                    <div class="audit-event-meta">
+                      <span class="risk ${classToken(row.risk_level)}">${escapeHtml(row.risk_level)}</span>
+                      ${row.tool_name ? `<span>${escapeHtml(row.tool_name)}</span>` : ""}
+                      <span>${escapeHtml(row.created_at || "")}</span>
                     </div>
-                  </details>
-                </article>
-              `;
-            }).join("")}
-          </div>
+                    <p>${escapeHtml(row.reason || "No reason recorded.")}</p>
+                    ${input || output ? `
+                      <details class="audit-why nested">
+                        <summary>Stored evidence</summary>
+                        <div class="audit-why-body">
+                          ${input ? `<label>Input stored safely</label><pre>${escapeHtml(input)}</pre>` : ""}
+                          ${output ? `<label>Decision evidence</label><pre>${escapeHtml(output)}</pre>` : ""}
+                        </div>
+                      </details>
+                    ` : ""}
+                  </article>
+                `;
+              }).join("")}
+            </div>
+          </details>
         </section>
       `;
     }).join("")}

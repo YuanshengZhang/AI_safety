@@ -189,9 +189,9 @@ secrets   only secret-detection events
 
 The selected filter has a black frame. Click **events** to return to the full audit log.
 
-Below the summary, events are grouped by request ID. Each request card shows a timeline so you can follow one user action from input check to policy decision.
+Below the summary, the current request is grouped by workflow step. Each step appears once. Open **Inspect events** only when you want the lower-level audit records.
 
-Each audit event has a numbered workflow badge. The number matches the workflow boxes in the middle of the screen:
+Each numbered audit step matches the workflow boxes in the middle of the screen:
 
 | Badge | Workflow box | Example audit events |
 |---|---|---|
